@@ -1,0 +1,11 @@
+region,population,area,sanitation_index,literacy_rate
+Chennai,8000000,426,0.89,91
+Delhi,19000000,1484,0.82,89
+Mumbai,21000000,603,0.87,92
+Bengaluru,12000000,741,0.90,94
+Hyderabad,10000000,650,0.85,88
+Kolkata,15000000,205,0.80,87
+Pune,7000000,516,0.91,93
+Jaipur,4500000,467,0.76,84
+Lucknow,3800000,631,0.79,82
+Ahmedabad,6500000,505,0.83,86

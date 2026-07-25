@@ -1,0 +1,11 @@
+region,temperature,rainfall,humidity,wind_speed
+Chennai,35,120,80,15
+Delhi,42,20,35,12
+Mumbai,32,250,88,18
+Bengaluru,29,150,70,10
+Hyderabad,36,80,50,14
+Kolkata,34,200,85,16
+Pune,31,90,65,11
+Jaipur,40,15,28,13
+Lucknow,38,60,55,9
+Ahmedabad,39,30,40,17
