@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import joblib
 
@@ -15,10 +16,15 @@ class AutoMLAgent:
 
     def preprocess(self):
 
-        X = self.df.drop("outbreak_risk", axis=1)
+        # region_name is human-readable text kept for reporting only -
+        # it must not go into the model's feature matrix, only the
+        # already-encoded "region" column should.
+        drop_cols = [c for c in ["outbreak_risk", "region_name"] if c in self.df.columns]
+
+        X = self.df.drop(columns=drop_cols)
         y = self.df["outbreak_risk"]
 
-        if "region" in X.columns:
+        if "region" in X.columns and X["region"].dtype == object:
             encoder = LabelEncoder()
             X["region"] = encoder.fit_transform(X["region"])
 
@@ -58,12 +64,19 @@ class AutoMLAgent:
 
         print("\nBest Accuracy:", round(grid.best_score_, 4))
 
+        os.makedirs("models", exist_ok=True)
         joblib.dump(
             grid.best_estimator_,
             "models/best_automl_model.pkl"
         )
 
         print("\nOptimized model saved successfully.")
+
+        return {
+            "best_params": grid.best_params_,
+            "best_accuracy": round(float(grid.best_score_), 4),
+            "model_path": "models/best_automl_model.pkl",
+        }
 
 
 if __name__ == "__main__":
