@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
 
 
 class FusionAgent:
@@ -10,11 +11,19 @@ class FusionAgent:
 
     def merge_data(self):
 
+        # IMPORTANT: merge on "region_name", not "region".
+        # Each domain agent (Climate/Health/Social) label-encodes "region"
+        # with its OWN independently-fit LabelEncoder, so the same city can
+        # end up as a different integer in each dataset. Merging on those
+        # encoded ints would silently join the wrong rows (or drop
+        # everything) whenever the sets of regions aren't identical.
+        # "region_name" is the untouched string version, so it's a safe key.
+
         # Merge Climate + Health
         merged_df = pd.merge(
             self.climate_df,
             self.health_df,
-            on="region",
+            on="region_name",
             how="inner"
         )
 
@@ -22,9 +31,22 @@ class FusionAgent:
         merged_df = pd.merge(
             merged_df,
             self.social_df,
-            on="region",
+            on="region_name",
             how="inner"
         )
+
+        # The merge above leaves behind the old per-dataset encoded "region"
+        # columns (suffixed region_x / region_y / region since each source
+        # had its own). They're inconsistent with each other, so drop them
+        # and build ONE clean, consistent encoded region column from
+        # region_name instead.
+        stale_region_cols = [
+            c for c in ["region", "region_x", "region_y"] if c in merged_df.columns
+        ]
+        merged_df = merged_df.drop(columns=stale_region_cols)
+
+        encoder = LabelEncoder()
+        merged_df["region"] = encoder.fit_transform(merged_df["region_name"])
 
         print("Datasets Successfully Merged")
 
@@ -48,6 +70,13 @@ class FusionAgent:
         return df
 
     def create_target(self, df):
+
+        if "dengue_cases" not in df.columns:
+            raise ValueError(
+                "Expected a 'dengue_cases' column (from the Health dataset) "
+                "to build the outbreak_risk target, but it wasn't found after "
+                f"merging. Columns available: {list(df.columns)}"
+            )
 
         # Create 3 balanced classes using dengue_cases
         df["outbreak_risk"] = pd.qcut(
