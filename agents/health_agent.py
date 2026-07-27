@@ -9,6 +9,12 @@ class HealthAgent:
 
     def load_data(self):
         self.df = pd.read_csv(self.file_path)
+
+        # Keep a readable copy of region BEFORE it gets label-encoded below,
+        # so downstream reporting / AI Q&A can say "Chennai" instead of "3"
+        if "region" in self.df.columns:
+            self.df["region_name"] = self.df["region"].astype(str)
+
         print("Health Dataset Loaded")
         return self.df
 
@@ -31,6 +37,9 @@ class HealthAgent:
         encoder = LabelEncoder()
 
         cat_cols = self.df.select_dtypes(include=['object']).columns
+
+        # region_name is kept as readable text on purpose - never encode it
+        cat_cols = [c for c in cat_cols if c != "region_name"]
 
         for col in cat_cols:
             self.df[col] = encoder.fit_transform(self.df[col])
@@ -74,7 +83,7 @@ class HealthAgent:
 
 if __name__ == "__main__":
 
-    agent = HealthAgent("health.csv")
+    agent = HealthAgent("datasets/health.csv")
 
     health_data = agent.run()
 
