@@ -1,30 +1,45 @@
 class DecisionAgent:
 
+    LABELS = {0: "LOW OUTBREAK RISK", 1: "MEDIUM OUTBREAK RISK", 2: "HIGH OUTBREAK RISK"}
+
+    RECOMMENDATIONS = {
+        0: [
+            "Continue routine monitoring.",
+            "Maintain sanitation.",
+            "Regular health checkups.",
+        ],
+        1: [
+            "Increase disease surveillance.",
+            "Conduct awareness campaigns.",
+            "Prepare nearby hospitals.",
+        ],
+        2: [
+            "Issue public health alert.",
+            "Increase mosquito control.",
+            "Deploy emergency medical teams.",
+            "Increase hospital resources.",
+        ],
+    }
+
     def __init__(self, prediction):
-        self.prediction = prediction
+        self.prediction = int(prediction)
 
     def recommend(self):
+        """Returns a dict so callers (Streamlit, API, CLI) can use the result directly."""
+
+        label = self.LABELS.get(self.prediction, "UNKNOWN RISK")
+        actions = self.RECOMMENDATIONS.get(self.prediction, [])
 
         print("\n===== DECISION AGENT =====")
+        print(f"Prediction: {label}")
+        for action in actions:
+            print(f"- {action}")
 
-        if self.prediction == 0:
-            print("Prediction: LOW OUTBREAK RISK")
-            print("- Continue routine monitoring.")
-            print("- Maintain sanitation.")
-            print("- Regular health checkups.")
-
-        elif self.prediction == 1:
-            print("Prediction: MEDIUM OUTBREAK RISK")
-            print("- Increase disease surveillance.")
-            print("- Conduct awareness campaigns.")
-            print("- Prepare nearby hospitals.")
-
-        else:
-            print("Prediction: HIGH OUTBREAK RISK")
-            print("- Issue public health alert.")
-            print("- Increase mosquito control.")
-            print("- Deploy emergency medical teams.")
-            print("- Increase hospital resources.")
+        return {
+            "risk_level": self.prediction,
+            "risk_label": label,
+            "recommendations": actions,
+        }
 
 
 if __name__ == "__main__":
