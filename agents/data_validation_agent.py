@@ -7,22 +7,29 @@ class DataValidationAgent:
         self.df = df
 
     def check_missing_values(self):
+        result = self.df.isnull().sum()
         print("\n===== Missing Values =====")
-        print(self.df.isnull().sum())
+        print(result)
+        return result.to_dict()
 
     def check_duplicates(self):
-        duplicates = self.df.duplicated().sum()
+        duplicates = int(self.df.duplicated().sum())
         print(f"\nDuplicate Rows: {duplicates}")
+        return duplicates
 
     def check_datatypes(self):
+        result = self.df.dtypes.astype(str)
         print("\n===== Data Types =====")
-        print(self.df.dtypes)
+        print(result)
+        return result.to_dict()
 
     def check_outliers(self):
 
         numeric = self.df.select_dtypes(include=["int64", "float64"])
 
         print("\n===== Outliers =====")
+
+        outlier_counts = {}
 
         for col in numeric.columns:
 
@@ -41,14 +48,21 @@ class DataValidationAgent:
 
             print(f"{col}: {len(outliers)}")
 
+            outlier_counts[col] = int(len(outliers))
+
+        return outlier_counts
+
     def check_class_balance(self, target):
 
         print("\n===== Target Distribution =====")
 
         if target in self.df.columns:
-            print(self.df[target].value_counts())
+            counts = self.df[target].value_counts()
+            print(counts)
+            return counts.to_dict()
         else:
             print(f"Column '{target}' not found!")
+            return {}
 
     def run(self, target):
 
@@ -56,13 +70,17 @@ class DataValidationAgent:
         print("DATA VALIDATION AGENT")
         print("=" * 50)
 
-        self.check_missing_values()
-        self.check_duplicates()
-        self.check_datatypes()
-        self.check_outliers()
-        self.check_class_balance(target)
+        results = {
+            "missing_values": self.check_missing_values(),
+            "duplicate_rows": self.check_duplicates(),
+            "datatypes": self.check_datatypes(),
+            "outliers": self.check_outliers(),
+            "class_balance": self.check_class_balance(target),
+        }
 
         print("\nData Validation Completed Successfully")
+
+        return results
 
 
 if __name__ == "__main__":
