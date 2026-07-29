@@ -1,4 +1,3 @@
-
 # Python
 __pycache__/
 *.pyc
@@ -12,6 +11,15 @@ venv/
 
 # macOS
 .DS_Store
+
+# Database files
+*.db
+
+# Uploaded datasets
+datasets/uploaded_dataset_*.csv
+
+# Generated results
+results/
 
 # Generated files
 models/*.pkl
