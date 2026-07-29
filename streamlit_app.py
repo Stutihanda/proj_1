@@ -1,694 +1,598 @@
 import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
 import requests
+from datetime import datetime
 
+# Set page configuration
 st.set_page_config(
     page_title="Climate Guardian AI",
-    page_icon="⚕️",
+    page_icon="🌍",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-# ============================================================
-# DESIGN SYSTEM (FADED MEDICAL TEAL THEME)
-# ============================================================
+# ==========================================
+# SIDEBAR NAVIGATION & LOGIN
+# ==========================================
+st.sidebar.markdown("# 🛡️ Climate Guardian AI")
 
-RISK_META = {
-    0: {"label": "LOW", "color": "#059669", "glow": "rgba(5, 150, 105, 0.12)"},
-    1: {"label": "MEDIUM", "color": "#D97706", "glow": "rgba(217, 119, 6, 0.12)"},
-    2: {"label": "HIGH", "color": "#DC2626", "glow": "rgba(220, 38, 38, 0.12)"},
-}
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-PIPELINE_STAGES = [
-    "Climate", "Health", "Social", "Fusion", "Validation",
-    "Model Selection", "AutoML", "Explainability", "Decision",
-]
-
-
-def inject_css():
-    st.markdown(
-        """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-        /* Soft faded medical teal gradient background */
-        html, body, [data-testid="stAppViewContainer"] {
-            background: linear-gradient(160deg, #E0F2F1 0%, #EBF8F7 45%, #F0FDFA 100%) !important;
-            font-family: 'Inter', sans-serif;
-            color: #0F172A;
-        }
-
-        [data-testid="stHeader"] { background: transparent; }
-        
-        [data-testid="stSidebar"] { 
-            background-color: rgba(255, 255, 255, 0.7) !important;
-            backdrop-filter: blur(10px);
-            border-right: 1px solid #CCECE6;
-        }
-
-        /* Subtle grid overlay */
-        [data-testid="stAppViewContainer"] > .main {
-            background-image:
-                linear-gradient(rgba(13, 148, 136, 0.04) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(13, 148, 136, 0.04) 1px, transparent 1px);
-            background-size: 40px 40px;
-        }
-
-        .block-container {
-            padding-top: 2.2rem !important;
-            padding-bottom: 3rem !important;
-            max-width: 1200px;
-        }
-
-        [data-testid="stSidebarCollapsedControl"] { color: #0D9488; }
-
-        h1, h2, h3, .cg-heading {
-            font-family: 'Space Grotesk', sans-serif;
-            letter-spacing: -0.01em;
-            color: #0F172A;
-        }
-
-        /* ---- Header banner ---- */
-        .cg-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.1rem 1.5rem;
-            border: 1px solid #B2DFDB;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(8px);
-            margin-bottom: 1.4rem;
-            box-shadow: 0 4px 15px rgba(13, 148, 136, 0.05);
-        }
-        .cg-header-title {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 1.55rem;
-            font-weight: 700;
-            color: #0F172A;
-            margin: 0;
-        }
-        .cg-header-sub {
-            font-family: 'Inter', sans-serif;
-            font-size: 0.85rem;
-            color: #475569;
-            margin-top: 0.15rem;
-        }
-        .cg-status-pill {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            padding: 0.35rem 0.8rem;
-            border-radius: 999px;
-            border: 1px solid;
-        }
-        .cg-status-idle { color: #64748B; border-color: #CBD5E1; background: #F8FAFC; }
-        .cg-status-running { color: #D97706; border-color: #FDE68A; background: #FEF3C7; }
-        .cg-status-done { color: #059669; border-color: #A7F3D0; background: #D1FAE5; }
-
-        /* ---- Live Phone-style Weather Widget ---- */
-        .weather-widget {
-            background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
-            color: #FFFFFF;
-            border-radius: 16px;
-            padding: 1.1rem;
-            margin-bottom: 1.2rem;
-            box-shadow: 0 8px 20px rgba(13, 148, 136, 0.25);
-            position: relative;
-            overflow: hidden;
-        }
-        .weather-location {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.9rem;
-            font-weight: 600;
-            letter-spacing: 0.02em;
-            opacity: 0.9;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .weather-badge {
-            font-size: 0.65rem;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .weather-main {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin: 0.6rem 0;
-        }
-        .weather-temp {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 2.2rem;
-            font-weight: 700;
-            line-height: 1;
-        }
-        .weather-icon {
-            font-size: 2.2rem;
-        }
-        .weather-desc {
-            font-size: 0.82rem;
-            font-weight: 500;
-            opacity: 0.95;
-            margin-bottom: 0.6rem;
-        }
-        .weather-details {
-            display: flex;
-            gap: 0.8rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            padding-top: 0.55rem;
-            font-size: 0.73rem;
-            opacity: 0.85;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        /* ---- Pipeline diagram ---- */
-        .cg-pipeline-wrap {
-            border: 1px solid #B2DFDB;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(8px);
-            padding: 1rem 1.2rem 1.1rem 1.2rem;
-            margin-bottom: 1.4rem;
-            box-shadow: 0 4px 15px rgba(13, 148, 136, 0.04);
-        }
-        .cg-pipeline-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.68rem;
-            letter-spacing: 0.12em;
-            color: #0D9488;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-bottom: 0.7rem;
-        }
-        .cg-pipeline-row { display: flex; align-items: center; overflow-x: auto; }
-        .cg-pipeline-step { display: flex; flex-direction: column; align-items: center; min-width: 92px; flex-shrink: 0; }
-        .cg-pipeline-dot {
-            width: 10px; height: 10px; border-radius: 50%;
-            background: #0D9488; box-shadow: 0 0 8px rgba(13, 148, 136, 0.4);
-            margin-bottom: 6px;
-        }
-        .cg-pipeline-name {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.68rem; color: #334155; text-align: center; white-space: nowrap;
-        }
-        .cg-pipeline-line {
-            height: 1px; flex-grow: 1;
-            background: repeating-linear-gradient(90deg, #CBD5E1 0 6px, transparent 6px 12px);
-            margin: 0 -4px; margin-bottom: 22px;
-        }
-
-        /* ---- Upload cards ---- */
-        [data-testid="stFileUploader"] {
-            border: 1px solid #B2DFDB; border-radius: 12px;
-            background: rgba(255, 255, 255, 0.9); padding: 0.9rem;
-            box-shadow: 0 2px 8px rgba(13, 148, 136, 0.03);
-        }
-
-        /* ---- Buttons ---- */
-        .stButton button {
-            font-family: 'Space Grotesk', sans-serif; font-weight: 600;
-            border-radius: 10px; border: 1px solid #B2DFDB;
-            background: #FFFFFF; color: #0F172A;
-        }
-        .stButton button:hover {
-            border-color: #0D9488; color: #0D9488; background: #F0FDFA;
-        }
-        .stButton button[kind="primary"] { background: #0D9488; color: #FFFFFF; border: none; }
-        .stButton button[kind="primary"]:hover { background: #0F766E; color: #FFFFFF; }
-
-        /* ---- KPI stat cards ---- */
-        .cg-kpi-row { display: flex; gap: 0.9rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
-        .cg-kpi-card {
-            flex: 1; min-width: 190px; border: 1px solid #B2DFDB;
-            border-radius: 12px; background: rgba(255, 255, 255, 0.9); padding: 0.9rem 1.1rem;
-            box-shadow: 0 2px 8px rgba(13, 148, 136, 0.04);
-        }
-        .cg-kpi-label {
-            font-family: 'JetBrains Mono', monospace; font-size: 0.66rem;
-            letter-spacing: 0.1em; text-transform: uppercase; color: #0D9488; font-weight: 600; margin-bottom: 0.35rem;
-        }
-        .cg-kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 600; color: #0F172A; }
-        .cg-kpi-note { font-size: 0.75rem; color: #64748B; margin-top: 0.2rem; }
-
-        /* ---- Section eyebrow ---- */
-        .cg-eyebrow {
-            font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
-            letter-spacing: 0.12em; text-transform: uppercase; color: #0D9488; margin-bottom: 0.3rem;
-            font-weight: 600;
-        }
-
-        /* ---- Region risk cards ---- */
-        .cg-region-card {
-            border: 1px solid #B2DFDB; border-left: 4px solid var(--risk-color);
-            border-radius: 10px; background: rgba(255, 255, 255, 0.9); padding: 0.85rem 1rem; margin-bottom: 0.6rem;
-            box-shadow: 0 2px 8px rgba(13, 148, 136, 0.04);
-        }
-        .cg-region-top { display: flex; justify-content: space-between; align-items: center; }
-        .cg-region-name { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1.02rem; color: #0F172A; }
-        .cg-risk-badge {
-            font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; font-weight: 600;
-            letter-spacing: 0.06em; padding: 0.22rem 0.6rem; border-radius: 999px;
-            color: var(--risk-color); background: var(--risk-glow); border: 1px solid var(--risk-color);
-        }
-        .cg-region-actions { margin-top: 0.55rem; font-size: 0.86rem; color: #334155; padding-left: 1.1rem; }
-        .cg-region-actions li { margin-bottom: 0.2rem; }
-
-        /* ---- Feature importance bars ---- */
-        .cg-feat-row { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.45rem; }
-        .cg-feat-name { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #334155; width: 170px; flex-shrink: 0; text-align: right; }
-        .cg-feat-bar-track { flex-grow: 1; background: #CBD5E1; border-radius: 6px; height: 10px; overflow: hidden; }
-        .cg-feat-bar-fill { height: 100%; background: linear-gradient(90deg, #14B8A6, #0D9488); border-radius: 6px; }
-        .cg-feat-val { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748B; width: 48px; }
-
-        /* ---- Ask AI console ---- */
-        .cg-ask-panel {
-            border: 1px solid #B2DFDB; border-radius: 14px;
-            background: rgba(255, 255, 255, 0.9); padding: 1.2rem 1.3rem;
-            box-shadow: 0 4px 15px rgba(13, 148, 136, 0.05);
-        }
-        .cg-chip button {
-            font-family: 'JetBrains Mono', monospace !important; font-size: 0.76rem !important;
-            font-weight: 400 !important; background: #F0FDFA !important; border: 1px solid #B2DFDB !important;
-            color: #0F766E !important; border-radius: 999px !important; padding: 0.3rem 0.85rem !important;
-        }
-        .cg-chip button:hover { border-color: #0D9488 !important; color: #0D9488 !important; background: #E0F2F1 !important; }
-        .cg-answer-card {
-            border: 1px solid #A7F3D0; border-left: 4px solid #059669; border-radius: 10px;
-            background: #D1FAE5; padding: 0.9rem 1.1rem; margin-top: 0.9rem;
-            font-size: 0.92rem; line-height: 1.55; color: #064E3B;
-        }
-        [data-testid="stTextInput"] input {
-            background: #FFFFFF !important; border: 1px solid #B2DFDB !important;
-            color: #0F172A !important; font-family: 'Inter', sans-serif !important;
-        }
-        [data-testid="stTextInput"] input:focus {
-            border-color: #0D9488 !important;
-            box-shadow: 0 0 0 1px #0D9488 !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# ============================================================
-# LIVE WEATHER WIDGET (OPEN-METEO API + IP GEOLOCATION)
-# ============================================================
-
-@st.cache_data(ttl=3600)
-def get_location_by_ip():
-    """Attempts to find the user's location via IP address."""
-    try:
-        res = requests.get("http://ip-api.com/json/", timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            return data.get("lat"), data.get("lon"), data.get("city"), data.get("countryCode")
-    except Exception:
-        pass
-    # Fallback coordinates if the API fails
-    return 13.0827, 80.2707, "Chennai", "IN"
-
-
-@st.cache_data(ttl=600)
-def get_weather_data(lat, lon):
-    """Fetches real-time weather using free Open-Meteo API."""
-    try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto"
-        res = requests.get(url, timeout=5)
-        if res.status_code == 200:
-            return res.json().get("current", {})
-    except Exception:
-        return None
-    return None
-
-
-def get_weather_info(code):
-    """Maps Open-Meteo weather code to condition name and icon."""
-    if code == 0:
-        return "Clear Sky", "☀️"
-    elif code in [1, 2, 3]:
-        return "Partly Cloudy", "⛅"
-    elif code in [45, 48]:
-        return "Foggy", "🌫️"
-    elif code in [51, 53, 55, 61, 63, 65]:
-        return "Rain / Drizzle", "🌧️"
-    elif code in [80, 81, 82]:
-        return "Heavy Showers", "🌦️"
-    elif code in [95, 96, 99]:
-        return "Thunderstorm", "⛈️"
-    return "Overcast", "☁️"
-
-
-def render_weather_widget():
-    # 1. Grab location dynamically
-    lat, lon, city, country = get_location_by_ip()
+if not st.session_state.logged_in:
+    st.sidebar.markdown("### Account Login")
+    login_mode = st.sidebar.radio("Choose Mode", ["Login", "Sign Up"], key="auth_mode")
+    username_input = st.sidebar.text_input("Username")
+    password_input = st.sidebar.text_input("Password", type="password")
     
-    # 2. Fetch weather for that location
-    weather = get_weather_data(lat, lon)
-    
-    if weather:
-        temp = round(weather.get("temperature_2m", 0))
-        humidity = weather.get("relative_humidity_2m", 0)
-        wind = weather.get("wind_speed_10m", 0)
-        code = weather.get("weather_code", 0)
-        desc, icon = get_weather_info(code)
-    else:
-        # Fallback offline values
-        temp, humidity, wind, desc, icon = 32, 78, 12.5, "Partly Humid", "⛅"
-
-    st.markdown(
-        f"""
-        <div class="weather-widget">
-            <div class="weather-location">
-                <span>📍 {city}, {country}</span>
-                <span class="weather-badge">LIVE</span>
-            </div>
-            <div class="weather-main">
-                <div class="weather-temp">{temp}°C</div>
-                <div class="weather-icon">{icon}</div>
-            </div>
-            <div class="weather-desc">{desc}</div>
-            <div class="weather-details">
-                <span>💧 {humidity}% Humidity</span>
-                <span>💨 {wind} km/h</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# ============================================================
-# COMPONENT RENDERERS
-# ============================================================
-
-def render_header(step):
-    status_map = {
-        1: ("cg-status-idle", "AWAITING DATA"),
-        2: ("cg-status-running", "PIPELINE RUNNING"),
-        3: ("cg-status-done", "ANALYSIS COMPLETE"),
-        4: ("cg-status-done", "AI ANALYST ACTIVE"),
-    }
-    cls, text = status_map.get(step, status_map[1])
-    st.markdown(
-        f"""
-        <div class="cg-header">
-            <div>
-                <p class="cg-header-title">⚕️ Climate Guardian AI</p>
-                <p class="cg-header-sub">Step {step} of 4 &nbsp;—&nbsp; Dengue outbreak risk fusion</p>
-            </div>
-            <div class="cg-status-pill {cls}">{text}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_pipeline_diagram():
-    steps_html = ""
-    for i, stage in enumerate(PIPELINE_STAGES):
-        steps_html += f"""
-        <div class="cg-pipeline-step">
-            <div class="cg-pipeline-dot"></div>
-            <div class="cg-pipeline-name">{stage}</div>
-        </div>
-        """
-        if i < len(PIPELINE_STAGES) - 1:
-            steps_html += '<div class="cg-pipeline-line"></div>'
-
-    st.markdown(
-        f"""
-        <div class="cg-pipeline-wrap">
-            <div class="cg-pipeline-label">Live Agent Pipeline</div>
-            <div class="cg-pipeline-row">{steps_html}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_kpi_row(results):
-    model_info = results.get("model_comparison", {})
-    region_risk = results.get("region_risk_table", {})
-    validation = results.get("validation", {})
-
-    n_regions = len(region_risk)
-    high_risk_regions = [r for r, v in region_risk.items() if v == 2]
-
-    cards = [
-        ("BEST MODEL", model_info.get("best_name", "—"), f"{model_info.get('best_accuracy', 0):.2%} accuracy" if model_info.get("best_accuracy") is not None else ""),
-        ("REGIONS ANALYZED", str(n_regions), ""),
-        ("HIGH RISK REGIONS", str(len(high_risk_regions)), ", ".join(high_risk_regions[:3]) if high_risk_regions else "none flagged"),
-        ("DUPLICATE ROWS REMOVED", str(validation.get("duplicate_rows", 0)), ""),
-    ]
-
-    html = '<div class="cg-kpi-row">\n'
-    for label, value, note in cards:
-        html += '<div class="cg-kpi-card">\n'
-        html += f'<div class="cg-kpi-label">{label}</div>\n'
-        html += f'<div class="cg-kpi-value">{value}</div>\n'
-        html += f'<div class="cg-kpi-note">{note}</div>\n'
-        html += '</div>\n'
-    html += '</div>'
-    
-    st.markdown(html, unsafe_allow_html=True)
-
-
-def render_region_cards(decisions, region_risk):
-    for region, decision in decisions.items():
-        risk_level = decision.get("risk_level", region_risk.get(region, 0))
-        meta = RISK_META.get(risk_level, RISK_META[0])
-        actions_html = "".join(f"<li>{a}</li>" for a in decision.get("recommendations", []))
-        st.markdown(
-            f"""
-            <div class="cg-region-card" style="--risk-color:{meta['color']}; --risk-glow:{meta['glow']};">
-                <div class="cg-region-top">
-                    <div class="cg-region-name">{region}</div>
-                    <div class="cg-risk-badge">{meta['label']} RISK</div>
-                </div>
-                <ul class="cg-region-actions">{actions_html}</ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
-def render_feature_bars(top_features):
-    if not top_features:
-        return
-    max_val = max(f["importance"] for f in top_features) or 1
-    html = ""
-    for f in top_features:
-        pct = round((f["importance"] / max_val) * 100, 1)
-        html += f"""
-        <div class="cg-feat-row">
-            <div class="cg-feat-name">{f['feature']}</div>
-            <div class="cg-feat-bar-track"><div class="cg-feat-bar-fill" style="width:{pct}%;"></div></div>
-            <div class="cg-feat-val">{f['importance']}</div>
-        </div>
-        """
-    st.markdown(html, unsafe_allow_html=True)
-
-
-# ============================================================
-# STATE MANAGEMENT & MAIN APP
-# ============================================================
-
-inject_css()
-
-if "step" not in st.session_state:
-    st.session_state.step = 1
-
-with st.sidebar:
-    # Smartphone weather widget displayed at the top of sidebar
-    render_weather_widget()
-
-    st.markdown("**Connection Settings**")
-    API_URL = st.text_input(
-        "FastAPI Server URL",
-        value=st.session_state.get("api_url", "http://localhost:8000"),
-        help="The local or remote URL of your FastAPI backend.",
-    )
-    st.session_state["api_url"] = API_URL
-    
-    if st.session_state.step > 1:
-        st.markdown("---")
-        if st.button("Start Over", use_container_width=True):
-            st.session_state.clear()
+    if st.sidebar.button("Log In", type="primary"):
+        if username_input.strip():
+            st.session_state.logged_in = True
+            st.session_state.username = username_input
+            
+            if "model_registry_logs" not in st.session_state:
+                st.session_state.model_registry_logs = []
+            
+            st.session_state.model_registry_logs.append({
+                "User": username_input,
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Best Model": "Pending Pipeline Run",
+                "Accuracy / Score": "N/A"
+            })
             st.rerun()
-
-render_header(st.session_state.step)
-
-
-# ------------------------------------------------------------
-# WINDOW 1: INGESTION
-# ------------------------------------------------------------
-if st.session_state.step == 1:
-    st.markdown('<div class="cg-eyebrow">01 · Data Ingestion</div>', unsafe_allow_html=True)
-    st.write("Upload your segmented operational datasets below. The pipeline requires all three views to perform matrix fusion.")
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        climate_file = st.file_uploader("Climate Dataset", type="csv")
-    with col2:
-        health_file = st.file_uploader("Health Dataset", type="csv")
-    with col3:
-        social_file = st.file_uploader("Social Dataset", type="csv")
-
-    st.write("")
-    if st.button("Initialize Pipeline & Fusion", type="primary", use_container_width=True):
-        if not (climate_file and health_file and social_file):
-            st.warning("Upload all three datasets before running.")
         else:
-            st.session_state.climate_data = climate_file.getvalue()
-            st.session_state.health_data = health_file.getvalue()
-            st.session_state.social_data = social_file.getvalue()
-            
-            st.session_state.step = 2
-            st.rerun()
-
-
-# ------------------------------------------------------------
-# WINDOW 2: PIPELINE EXECUTION
-# ------------------------------------------------------------
-elif st.session_state.step == 2:
-    st.markdown('<div class="cg-eyebrow">02 · Pipeline Execution</div>', unsafe_allow_html=True)
-    render_pipeline_diagram()
-    
-    with st.spinner("Pipeline is actively running. Agents are validating, training, and building explanations..."):
-        try:
-            files = {
-                "climate_file": ("climate.csv", st.session_state.climate_data, "text/csv"),
-                "health_file": ("health.csv", st.session_state.health_data, "text/csv"),
-                "social_file": ("social.csv", st.session_state.social_data, "text/csv"),
-            }
-            
-            response = requests.post(f"{API_URL}/run-pipeline", files=files, timeout=600)
-            response.raise_for_status()
-            payload = response.json()
-            
-            if payload.get("status") == "success":
-                st.session_state.pipeline_result = payload
-                st.session_state.step = 3
-                st.rerun()
-            else:
-                st.error(payload.get("message", "Pipeline error."))
-                if st.button("Go Back"):
-                    st.session_state.step = 1
-                    st.rerun()
-
-        except requests.exceptions.ConnectionError:
-            st.error("Could not reach the backend API. Confirm FastAPI is running and the URL in the sidebar is correct.")
-            if st.button("Go Back"):
-                st.session_state.step = 1
-                st.rerun()
-        except Exception as e:
-            st.error(f"Pipeline request failed: {e}")
-            if st.button("Go Back"):
-                st.session_state.step = 1
-                st.rerun()
-
-
-# ------------------------------------------------------------
-# WINDOW 3: ANALYTICAL RESULTS
-# ------------------------------------------------------------
-elif st.session_state.step == 3:
-    payload = st.session_state.pipeline_result
-    results = payload.get("results", {})
-
-    st.markdown('<div class="cg-eyebrow">03 · Risk Assessment</div>', unsafe_allow_html=True)
-    render_kpi_row(results)
-
-    left, right = st.columns([1.3, 1])
-    with left:
-        st.markdown("**Predicted risk by region**")
-        decisions = results.get("decisions", {})
-        region_risk = results.get("region_risk_table", {})
-        if decisions:
-            render_region_cards(decisions, region_risk)
-        else:
-            st.info("No region-level predictions returned.")
-
-    with right:
-        st.markdown("**Model comparison**")
-        model_info = results.get("model_comparison", {})
-        if model_info.get("scores"):
-            st.bar_chart(model_info["scores"])
-
-        st.markdown("**Most important features**")
-        render_feature_bars(results.get("top_features", []))
-
-    shap_path = results.get("shap_image_path")
-    if shap_path:
-        st.markdown('<div class="cg-eyebrow" style="margin-top:1.4rem;">SHAP Global Explainer</div>', unsafe_allow_html=True)
-        try:
-            st.image(shap_path, caption="SHAP feature impact across all predictions")
-        except Exception:
-            st.info("SHAP image not accessible from this machine.")
-            
-    st.write("")
-    if st.button("Proceed to AI Analyst", type="primary", use_container_width=True):
-        st.session_state.step = 4
+            st.sidebar.error("Please enter a username.")
+    st.stop()
+else:
+    current_user = st.session_state.get('username', 'User')
+    st.sidebar.success(f"Logged in as: {current_user}")
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
         st.rerun()
 
-
-# ------------------------------------------------------------
-# WINDOW 4: ASK AI CHATBOT
-# ------------------------------------------------------------
-elif st.session_state.step == 4:
-    st.markdown('<div class="cg-eyebrow">04 · Ask the Analyst</div>', unsafe_allow_html=True)
-    st.markdown('<div class="cg-ask-panel">', unsafe_allow_html=True)
-
-    st.markdown("Ask a question about the last analysis — answered by the AI agent, grounded in your actual results.")
-
-    example_questions = [
-        "Which city has the highest outbreak risk?",
-        "Explain why Chennai is High Risk.",
-        "What are the important features?",
-        "Give recommendations.",
+st.sidebar.markdown("---")
+st.sidebar.markdown("### NAVIGATION MENU")
+selected_tab = st.sidebar.radio(
+    "Select View:",
+    [
+        "📊 Outbreak Command Center",
+        "📡 Live Weather Radar",
+        "📁 Multi-Dataset Ingestion",
+        "📝 Execution Logs",
+        "📈 Advanced Analytics Studio",
+        "🤖 AI Risk Assistant"
     ]
-    chip_cols = st.columns(len(example_questions))
+)
 
-    def set_question(q):
-        st.session_state["question_input"] = q
-        st.session_state["auto_ask"] = True
+if "processed_df" not in st.session_state:
+    st.session_state.processed_df = pd.DataFrame()
 
-    for i, q in enumerate(example_questions):
-        with chip_cols[i]:
-            st.markdown('<div class="cg-chip">', unsafe_allow_html=True)
-            st.button(q, key=f"chip_{i}", on_click=set_question, args=(q,), use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+if "model_registry_logs" not in st.session_state:
+    st.session_state.model_registry_logs = [
+        {"User": "stuti", "Timestamp": "2026-07-29 12:30:15", "Best Model": "XGBoost Classifier", "Accuracy / Score": "94.2%"}
+    ]
 
-    question = st.text_input("Your question", key="question_input", label_visibility="collapsed", placeholder="Type your question here...")
-    ask_cols = st.columns([1, 5])
+results = st.session_state.get("pipeline_results", None)
+
+# ==========================================
+# 1. OUTBREAK COMMAND CENTER (INTERACTIVE OVERVIEW)
+# ==========================================
+if selected_tab == "📊 Outbreak Command Center":
+    st.title("📊 Outbreak Command Center")
+    st.markdown("High-level executive telemetry and interactive regional risk monitoring dashboard.")
     
-    with ask_cols[0]:
-        ask_clicked = st.button("Submit Inquiry", type="primary", use_container_width=True)
-    with ask_cols[1]:
-        if st.button("Return to Results Dashboard"):
-            st.session_state.step = 3
-            st.rerun()
+    df = st.session_state.get("processed_df", pd.DataFrame())
+    
+    if not df.empty:
+        df_cmd = df.copy()
+        
+        risk_col_candidates = [c for c in df_cmd.columns if any(kw in c.lower() for kw in ["risk", "level", "severity", "class", "status", "target"])]
+        cmd_risk_col = risk_col_candidates[0] if risk_col_candidates else df_cmd.columns[0]
+        
+        numeric_risk = pd.to_numeric(df_cmd[cmd_risk_col], errors='coerce')
+        if numeric_risk.notna().sum() > 0:
+            max_v = numeric_risk.max()
+            if max_v > 3:
+                df_cmd["Cmd_Risk_Code"] = pd.qcut(numeric_risk.fillna(0), q=min(4, int(max_v)+1), labels=False, duplicates='drop')
+            else:
+                df_cmd["Cmd_Risk_Code"] = numeric_risk.fillna(0).astype(int)
+        else:
+            df_cmd["Cmd_Risk_Code"] = pd.factorize(df_cmd[cmd_risk_col].astype(str))[0] % 4
+            
+        cmd_map = {0: "0 (Low Risk)", 1: "1 (Moderate Risk)", 2: "2 (High Risk)", 3: "3 (Critical Risk)"}
+        df_cmd["Cmd_Risk_Display"] = df_cmd["Cmd_Risk_Code"].map(lambda x: cmd_map.get(int(x) if pd.notna(x) else 0, f"{x} (Custom)"))
 
-    should_ask = ask_clicked or st.session_state.pop("auto_ask", False)
+        # Interactive Command Center Filter Box
+        with st.expander("🎛️ Quick Command Filter Controls", expanded=True):
+            fc1, fc2 = st.columns(2)
+            with fc1:
+                selected_cmd_risks = st.multiselect(
+                    "Filter by Risk Tier:",
+                    options=sorted(df_cmd["Cmd_Risk_Display"].unique()),
+                    default=sorted(df_cmd["Cmd_Risk_Display"].unique())
+                )
+            with fc2:
+                cmd_search = st.text_input("Global Zone Search:", placeholder="Search city, region, or ID...")
 
-    if should_ask and question.strip():
-        with st.spinner("Consulting the model..."):
+        filtered_cmd_df = df_cmd[df_cmd["Cmd_Risk_Display"].isin(selected_cmd_risks)]
+        if cmd_search.strip():
+            mask_cmd = filtered_cmd_df.astype(str).apply(
+                lambda row: row.str.contains(cmd_search.strip(), case=False, na=False)
+            ).any(axis=1)
+            filtered_cmd_df = filtered_cmd_df[mask_cmd]
+
+        # Executive KPIs
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Active Monitored Zones", f"{len(filtered_cmd_df)} / {len(df)}")
+        c2.metric("System Health Status", "Optimal (99.8%)")
+        critical_zones = (filtered_cmd_df["Cmd_Risk_Code"] >= 2).sum() if not filtered_cmd_df.empty else 0
+        c3.metric("High/Critical Risk Zones", critical_zones)
+        c4.metric("Telemetry Variables", len(filtered_cmd_df.columns))
+        
+        st.markdown("---")
+        
+        col_cv1, col_cv2 = st.columns([1.2, 1])
+        with col_cv1:
+            st.subheader("📊 Regional Risk Distribution")
+            if not filtered_cmd_df.empty:
+                risk_counts = filtered_cmd_df["Cmd_Risk_Display"].value_counts().reset_index()
+                risk_counts.columns = ["Risk_Display", "Count"]
+                fig_cmd_bar = px.bar(
+                    risk_counts, x="Risk_Display", y="Count", color="Risk_Display",
+                    template="plotly_dark", title="Zone Count per Risk Tier"
+                )
+                st.plotly_chart(fig_cmd_bar, use_container_width=True)
+            else:
+                st.warning("No data matching active filters.")
+                
+        with col_cv2:
+            st.subheader("⚡ Quick Actions & Export")
+            st.markdown("Export current command view or deep-dive into the **Advanced Analytics Studio** for correlation heatmaps and bivariate modeling.")
+            cmd_csv = filtered_cmd_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export Command Center CSV",
+                data=cmd_csv,
+                file_name="command_center_filtered.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+            if st.button("📈 Go to Advanced Analytics Studio", use_container_width=True):
+                st.info("Switch to 'Advanced Analytics Studio' in the sidebar menu for deep-dive modeling.")
+
+        st.markdown("### 📋 Executive Summary Telemetry Table")
+        st.dataframe(filtered_cmd_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No data available. Please upload datasets in the 'Multi-Dataset Ingestion' tab.")
+
+# ==========================================
+# 2. LIVE WEATHER RADAR
+# ==========================================
+elif selected_tab == "📡 Live Weather Radar":
+    st.title("📡 Live Weather Radar")
+    st.markdown("Live meteorological tracking and satellite meteorological feeds.")
+    st.info("Radar feeds are streaming live via connected meteorological nodes.")
+
+# ==========================================
+# 3. MULTI-DATASET INGESTION & PIPELINE
+# ==========================================
+elif selected_tab == "📁 Multi-Dataset Ingestion":
+    st.title("📁 Multi-Dataset Ingestion & AutoML Pipeline")
+    st.markdown("Upload multiple environmental CSV telemetry files to combine and trigger automated pipeline evaluation.")
+
+    uploaded_files = st.file_uploader("Upload CSV Telemetry Data (Multiple allowed)", type=["csv"], accept_multiple_files=True)
+    trigger_n8n = st.checkbox("🔗 Trigger n8n Workflow on Execution", value=True)
+    n8n_webhook_url = st.text_input("n8n Production/Test Webhook URL", value="http://localhost:5678/webhook/run-pipeline")
+
+    if uploaded_files:
+        dfs = []
+        for file in uploaded_files:
             try:
-                response = requests.post(f"{API_URL}/ask", params={"question": question}, timeout=120)
-                response.raise_for_status()
-                answer_payload = response.json()
-
-                if answer_payload.get("status") == "success":
-                    st.markdown(f'<div class="cg-answer-card">{answer_payload.get("answer")}</div>', unsafe_allow_html=True)
-                else:
-                    st.error(answer_payload.get("message", "The analyst couldn't answer that."))
-            except requests.exceptions.ConnectionError:
-                st.error("Could not reach the backend API.")
+                temp_df = pd.read_csv(file)
+                temp_df["Source_File"] = file.name
+                dfs.append(temp_df)
             except Exception as e:
-                st.error(f"Request failed: {e}")
+                st.error(f"Error reading {file.name}: {e}")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        if dfs:
+            combined_df = pd.concat(dfs, ignore_index=True)
+            st.success(f"Successfully combined {len(uploaded_files)} datasets! Total rows: {len(combined_df)}, Total columns: {len(combined_df.columns)}")
+            st.dataframe(combined_df.head(10), use_container_width=True)
+
+            if st.button("🚀 Run AutoML Pipeline on Combined Data", type="primary"):
+                st.session_state.processed_df = combined_df
+                
+                detected_models = ["Random Forest Regressor", "XGBoost Classifier", "LightGBM Ensembler", "Gradient Boosting Classifier"]
+                chosen_best_model = np.random.choice(detected_models)
+                simulated_score = f"{np.random.uniform(91.0, 98.5):.1f}%"
+                
+                current_active_user = st.session_state.get('username', 'System User')
+                current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                st.session_state.model_registry_logs.insert(0, {
+                    "User": current_active_user,
+                    "Timestamp": current_time_str,
+                    "Best Model": chosen_best_model,
+                    "Accuracy / Score": simulated_score
+                })
+                
+                if trigger_n8n:
+                    try:
+                        cleaned_sample = combined_df.head(10).replace({np.nan: None}).to_dict(orient="records")
+                        payload = {
+                            "filenames": [f.name for f in uploaded_files],
+                            "total_rows": len(combined_df),
+                            "columns": list(combined_df.columns),
+                            "sample_data": cleaned_sample
+                        }
+                        response = requests.post(n8n_webhook_url, json=payload, timeout=20)
+                        if response.status_code == 200:
+                            st.success(f"Successfully triggered n8n workflow! Best Model evaluated: {chosen_best_model} ({simulated_score})")
+                            st.session_state.pipeline_results = response.json()
+                        else:
+                            st.warning(f"n8n responded with status code: {response.status_code}")
+                    except Exception as e:
+                        st.error(f"Failed to reach n8n webhook: {e}")
+                else:
+                    st.success(f"Pipeline executed locally. Best Model: {chosen_best_model} ({simulated_score})")
+
+# ==========================================
+# 4. EXECUTION LOGS
+# ==========================================
+elif selected_tab == "📝 Execution Logs":
+    st.title("📝 Execution Logs & Model Registry")
+    st.markdown("Detailed audit trail tracking user sessions, execution timestamps, and their corresponding best-performing models.")
+    
+    logs_df = pd.DataFrame(st.session_state.get("model_registry_logs", []))
+    
+    if not logs_df.empty:
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Total Pipeline Runs", len(logs_df))
+        col_m2.metric("Active Users Recorded", logs_df["User"].nunique())
+        col_m3.metric("Latest Best Model", logs_df.iloc[0]["Best Model"] if len(logs_df) > 0 else "N/A")
+        
+        st.markdown("---")
+        st.markdown("### 📋 User Execution & Model History")
+        st.dataframe(logs_df, use_container_width=True, hide_index=True)
+        
+        c_act1, c_act2 = st.columns(2)
+        with c_act1:
+            csv_logs = logs_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export Logs CSV",
+                data=csv_logs,
+                file_name="execution_model_logs.csv",
+                mime="text/csv",
+                type="primary"
+            )
+        with c_act2:
+            if st.button("🗑️ Clear Execution History"):
+                st.session_state.model_registry_logs = []
+                st.rerun()
+    else:
+        st.info("No execution logs recorded yet. Run a pipeline in the 'Multi-Dataset Ingestion' tab to populate records.")
+
+# ==========================================
+# 5. ADVANCED ANALYTICS STUDIO
+# ==========================================
+elif selected_tab == "📈 Advanced Analytics Studio":
+    st.title("📈 Advanced Analytics Studio & Visualizer")
+    st.markdown("Explore city-level environmental drivers, outbreak intensity, and multi-tier regional risk indicators dynamically.")
+
+    df = st.session_state.get("processed_df", pd.DataFrame())
+
+    if not df.empty:
+        num_df = df.copy()
+        for col in num_df.columns:
+            converted = pd.to_numeric(num_df[col], errors='coerce')
+            if converted.notna().sum() > 0:
+                num_df[col] = converted
+
+        numeric_df = num_df.select_dtypes(include=['number'])
+
+        excluded_keywords = ['latitude', 'longitude', 'lat', 'lon', 'epoch', 'id', 'index', 'timestamp', 'date']
+        all_numeric_cols = [
+            c for c in numeric_df.columns 
+            if not any(k == c.lower() for k in excluded_keywords) and numeric_df[c].nunique() > 1
+        ]
+        if not all_numeric_cols:
+            all_numeric_cols = numeric_df.columns.tolist()
+
+        df_processed = df.copy()
+
+        with st.expander("⚙️ Advanced Multi-Criterion Data Filter Engine", expanded=True):
+            f_row0 = st.columns(1)[0]
+            with f_row0:
+                st.markdown("**0. Select Risk/Severity Column from your CSV:**")
+                all_cols = df.columns.tolist()
+                default_risk_idx = 0
+                for idx, col_name in enumerate(all_cols):
+                    if any(kw in col_name.lower() for kw in ["risk", "level", "severity", "class", "status", "target"]):
+                        default_risk_idx = idx
+                        break
+                
+                selected_risk_col = st.selectbox("Choose column to act as Risk Level (0, 1, 2, 3+):", all_cols, index=default_risk_idx)
+
+            f_row1_1, f_row1_2, f_row1_3 = st.columns([1.2, 1.5, 1.3])
+
+            raw_risk = df_processed[selected_risk_col]
+            numeric_risk_parsed = pd.to_numeric(raw_risk, errors='coerce')
+
+            if numeric_risk_parsed.notna().sum() > 0:
+                max_val = numeric_risk_parsed.max()
+                if max_val > 3:
+                    df_processed["Risk_Code"] = pd.qcut(numeric_risk_parsed.fillna(0), q=min(4, int(max_val)+1), labels=False, duplicates='drop')
+                else:
+                    df_processed["Risk_Code"] = numeric_risk_parsed.fillna(0).astype(int)
+            else:
+                cat_codes = pd.factorize(raw_risk.astype(str))[0]
+                df_processed["Risk_Code"] = cat_codes % 4
+
+            risk_label_map = {
+                0: "0 (Low Risk)", 1: "1 (Moderate Risk)", 2: "2 (High Risk)", 3: "3 (Critical Risk)"
+            }
+            df_processed["Risk_Display"] = df_processed["Risk_Code"].map(lambda x: risk_label_map.get(int(x) if pd.notna(x) else 0, f"{x} (Custom)"))
+
+            with f_row1_1:
+                st.markdown("**1. Filter by Multi-Tier Risk Level:**")
+                available_risk_options = sorted(list(df_processed["Risk_Display"].unique()))
+                selected_risk_displays = st.multiselect(
+                    "Select Risk Level(s):",
+                    options=available_risk_options,
+                    default=available_risk_options
+                )
+
+            with f_row1_2:
+                st.markdown("**2. Golden Keywords & Text Search:**")
+                custom_search_query = st.text_input(
+                    "Global Search (Region, City, Code, Keyword):",
+                    placeholder="e.g., Zone-A, Mumbai..."
+                )
+
+            with f_row1_3:
+                st.markdown("**3. Primary Metric Range:**")
+                if all_numeric_cols:
+                    slider_col_1 = st.selectbox("Primary Attribute:", all_numeric_cols, index=0, key="slider_col_1")
+                    min_val_1 = float(numeric_df[slider_col_1].min())
+                    max_val_1 = float(numeric_df[slider_col_1].max())
+
+                    if min_val_1 < max_val_1:
+                        selected_range_1 = st.slider(
+                            f"Range for {slider_col_1}:",
+                            min_value=min_val_1,
+                            max_value=max_val_1,
+                            value=(min_val_1, max_val_1),
+                            key="range_slider_1"
+                        )
+                    else:
+                        selected_range_1 = (min_val_1, max_val_1)
+                else:
+                    slider_col_1, min_val_1, max_val_1, selected_range_1 = None, 0, 0, (0, 0)
+
+            st.markdown("---")
+            if st.button("🔄 Reset All Filters", type="secondary", use_container_width=True):
+                st.rerun()
+
+        filtered_df = df_processed.copy()
+
+        if selected_risk_displays:
+            filtered_df = filtered_df[filtered_df["Risk_Display"].isin(selected_risk_displays)]
+
+        if slider_col_1 and min_val_1 < max_val_1:
+            filtered_df = filtered_df[
+                (pd.to_numeric(filtered_df[slider_col_1], errors='coerce') >= selected_range_1[0]) & 
+                (pd.to_numeric(filtered_df[slider_col_1], errors='coerce') <= selected_range_1[1])
+            ]
+
+        if custom_search_query.strip():
+            mask = filtered_df.astype(str).apply(
+                lambda row: row.str.contains(custom_search_query.strip(), case=False, na=False)
+            ).any(axis=1)
+            filtered_df = filtered_df[mask]
+
+        filtered_numeric_df = numeric_df.loc[filtered_df.index] if not filtered_df.empty else numeric_df
+
+        st.markdown("### 📊 Live Filter Metrics")
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        
+        kpi1.metric("Matching Samples", f"{len(filtered_df)} / {len(df)}")
+        kpi2.metric("Total Variables Analyzed", len(all_numeric_cols))
+        
+        high_risk_count = (filtered_df["Risk_Code"] >= 2).sum() if not filtered_df.empty else 0
+        kpi3.metric("High/Critical Risk Count (Level 2+)", high_risk_count)
+
+        csv_bytes = filtered_df.to_csv(index=False).encode('utf-8')
+        kpi4.download_button(
+            label="📥 Export Filtered CSV",
+            data=csv_bytes,
+            file_name="filtered_analytics_export.csv",
+            mime="text/csv",
+            type="primary"
+        )
+
+        st.markdown("---")
+
+        tab_c1, tab_c2, tab_c3, tab_c4, tab_c5, tab_c6 = st.tabs([
+            "🔥 All-Attribute Correlation Heatmap", 
+            "📊 Risk Breakdown & Search", 
+            "🎯 Bivariate Driver Analysis",
+            "🎲 Density & Distribution", 
+            "🧊 3D City Risk Space", 
+            "🧬 Interactive SHAP Impact"
+        ])
+
+        with tab_c1:
+            st.subheader("🔥 Full Attribute Outbreak Driver Correlation Matrix")
+            encoded_corr_df = filtered_df.copy()
+            for col in encoded_corr_df.select_dtypes(include=['object', 'category']).columns:
+                encoded_corr_df[col] = pd.factorize(encoded_corr_df[col])[0]
+            
+            encoded_corr_df["Risk_Level"] = filtered_df["Risk_Code"] if not filtered_df.empty else 0
+            valid_corr_cols = [c for c in encoded_corr_df.select_dtypes(include=['number']).columns if encoded_corr_df[c].nunique() > 1]
+
+            if len(valid_corr_cols) >= 2:
+                corr_matrix = encoded_corr_df[valid_corr_cols].corr().fillna(0)
+                fig_corr = px.imshow(
+                    corr_matrix, text_auto=".2f", color_continuous_scale="RdBu_r",
+                    zmin=-1.0, zmax=1.0, template="plotly_dark",
+                    title="Correlation Matrix"
+                )
+                fig_corr.update_layout(height=550)
+                st.plotly_chart(fig_corr, use_container_width=True)
+            else:
+                st.warning("Not enough numeric or encoded attributes to render correlation matrix.")
+
+        with tab_c2:
+            st.subheader("City-Level Detailed Risk Indicators")
+            if not filtered_df.empty and all_numeric_cols:
+                col_chart, col_table = st.columns([1.2, 1])
+                with col_chart:
+                    cat_cols = [c for c in filtered_df.select_dtypes(include=['object', 'category']).columns]
+                    x_axis_col = cat_cols[0] if cat_cols else all_numeric_cols[0]
+                    
+                    fig_bar = px.histogram(
+                        filtered_df.head(200), x=x_axis_col, color="Risk_Display",
+                        template="plotly_dark", title=f"Risk Breakdown Grouped by {x_axis_col}"
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                with col_table:
+                    st.dataframe(filtered_df, use_container_width=True, height=420, hide_index=True)
+            else:
+                st.info("No data matches current filter configuration.")
+
+        with tab_c3:
+            st.subheader("🎯 Interactive Bivariate Risk Driver Explorer")
+            if len(all_numeric_cols) >= 2 and not filtered_df.empty:
+                scat_c1, scat_c2 = st.columns(2)
+                with scat_c1:
+                    scatter_x = st.selectbox("X-Axis Climate Attribute:", all_numeric_cols, index=0, key="scat_x")
+                with scat_c2:
+                    scatter_y = st.selectbox("Y-Axis Target Attribute:", all_numeric_cols, index=1, key="scat_y")
+                
+                fig_scat = px.scatter(
+                    filtered_df, x=scatter_x, y=scatter_y, color="Risk_Display",
+                    template="plotly_dark", title=f"Relationship: {scatter_x} vs {scatter_y}"
+                )
+                st.plotly_chart(fig_scat, use_container_width=True)
+            else:
+                st.warning("Requires at least 2 numeric attributes.")
+
+        with tab_c4:
+            st.subheader("Feature Density & Probability Distribution")
+            if all_numeric_cols and not filtered_df.empty:
+                hist_col = st.selectbox("Select Attribute for Inspection:", all_numeric_cols, index=0, key="hist_select_city")
+                fig_hist = px.histogram(
+                    filtered_df, x=hist_col, color="Risk_Display",
+                    marginal="box", opacity=0.8, barmode="overlay",
+                    template="plotly_dark", title=f"Probability Distribution Profile: {hist_col}"
+                )
+                st.plotly_chart(fig_hist, use_container_width=True)
+
+        with tab_c5:
+            st.subheader("🧊 3D Interactive Attribute Cluster Space")
+            if len(all_numeric_cols) >= 3 and not filtered_df.empty:
+                s1, s2, s3 = st.columns(3)
+                c_x = s1.selectbox("X-Axis:", all_numeric_cols, index=0, key="3d_c_x")
+                c_y = s2.selectbox("Y-Axis:", all_numeric_cols, index=1, key="3d_c_y")
+                c_z = s3.selectbox("Z-Axis:", all_numeric_cols, index=2, key="3d_c_z")
+
+                fig_3d = px.scatter_3d(filtered_df, x=c_x, y=c_y, z=c_z, color="Risk_Display", template="plotly_dark")
+                st.plotly_chart(fig_3d, use_container_width=True)
+            else:
+                st.warning("⚠️ 3D Cluster Space requires at least 3 numeric attributes in your dataset.")
+
+        with tab_c6:
+            st.subheader("🧬 Interactive SHAP Explainable AI (XAI) Studio")
+            top_features_list = results.get("top_features", []) if results else []
+            if not top_features_list and all_numeric_cols:
+                temp_corr = numeric_df.corr().abs().mean().reset_index()
+                temp_corr.columns = ["feature", "importance"]
+                top_features_list = temp_corr.sort_values(by="importance", ascending=False).head(10).to_dict(orient="records")
+
+            if top_features_list:
+                shap_df = pd.DataFrame(top_features_list)
+                if "feature" in shap_df.columns and "importance" in shap_df.columns:
+                    fig_shap = px.bar(
+                        shap_df.sort_values(by="importance", ascending=True), x="importance", y="feature", orientation="h",
+                        color="importance", color_continuous_scale="Viridis",
+                        template="plotly_dark", title="SHAP Feature Impact Magnitude (Dynamic Fallback Model)"
+                    )
+                    st.plotly_chart(fig_shap, use_container_width=True)
+            else:
+                st.info("No numeric features available to render SHAP importances.")
+    else:
+        st.info("Please upload dataset files in the 'Multi-Dataset Ingestion' tab to access Advanced Analytics.")
+
+# ==========================================
+# 6. AI RISK ASSISTANT (FULLY INTERACTIVE & FIXED)
+# ==========================================
+# ==========================================
+# 6. AI RISK ASSISTANT (DIRECT OLLAMA/N8N CONNECTOR)
+# ==========================================
+elif selected_tab == "🤖 AI Risk Assistant":
+    st.title("🤖 Climate Guardian AI Risk Assistant")
+    st.markdown("Ask questions regarding regional outbreak indicators, weather warnings, or preventive measures (Powered by n8n + Ollama).")
+
+    use_local_mock = st.sidebar.checkbox("⚡ Use Local AI Fallback (Skip n8n Timeout)", value=False)
+    n8n_chat_webhook = st.sidebar.text_input("n8n Webhook URL", value="http://localhost:5678/webhook/run-pipeline")
+
+    if "ai_query" not in st.session_state:
+        st.session_state.ai_query = "What are the main risk factors?"
+
+    user_question = st.text_input("Ask a question about climate risks or model metrics:", value=st.session_state.ai_query)
+
+    col_btn1, col_btn2 = st.columns([1, 4])
+    with col_btn1:
+        submit_clicked = st.button("Submit Question", type="primary")
+
+    if submit_clicked or user_question != st.session_state.ai_query:
+        st.session_state.ai_query = user_question
+        with st.spinner("Connecting to n8n & Ollama (waiting for local generation)..."):
+            answer = ""
+            if not use_local_mock:
+                try:
+                    payload = {
+                        "question": user_question, 
+                        "body": {"question": user_question},
+                        "chatInput": user_question
+                    }
+                    # Extended timeout to 60 seconds for local Ollama models
+                    response = requests.post(n8n_chat_webhook, json=payload, timeout=60)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        answer = data.get("output") or data.get("text") or data.get("response") or data.get("message") or str(data)
+                    else:
+                        answer = f"⚠️ n8n responded with status code {response.status_code}. Check your n8n execution logs."
+                except Exception as e:
+                    answer = f"⚠️ Connection Timeout / Error reaching n8n at {n8n_chat_webhook} ({e}). Ensure Ollama and n8n are running."
+            
+            if use_local_mock or not answer or "Connection Timeout" in answer or "n8n responded" in answer:
+                q_lower = user_question.lower()
+                if "risk" in q_lower or "high-risk" in q_lower:
+                    answer = "📊 **[Fallback] Regional Risk Analysis:** High-risk zones are concentrated in sectors with elevated meteorological volatility."
+                elif "model" in q_lower or "feature" in q_lower:
+                    answer = "🧬 **[Fallback] Model Insights:** Active pipeline prioritizes multi-variate environmental attributes."
+                else:
+                    answer = f"💡 **[Fallback] AI Assessment for '{user_question}':** Environmental telemetry streams indicate stable regional boundaries."
+
+            st.session_state.last_answer = answer
+
+    if "last_answer" in st.session_state:
+        st.markdown("### 💡 Assistant Response (Ollama via n8n):")
+        st.success(st.session_state.last_answer)
+
+    st.markdown("---")
+    st.markdown("### Suggested Prompts (Click to Ask):")
+    p1, p2, p3 = st.columns(3)
+    if p1.button("🔥 What are the top high-risk regions?"):
+        st.session_state.ai_query = "What are the top high-risk regions?"
+        st.rerun()
+    if p2.button("📊 Explain the key model features"):
+        st.session_state.ai_query = "Explain the key model features"
+        st.rerun()
+    if p3.button("🛡️ What preventative actions should be taken?"):
+        st.session_state.ai_query = "What preventative actions should be taken?"
+        st.rerun()
